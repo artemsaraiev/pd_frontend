@@ -12,11 +12,13 @@
         <PaperPanel @paper-changed="onPaperChanged" />
         <hr />
         <AnchorsPanel :paperId="currentPaperId" />
+        <AnchorsList :paperId="currentPaperId" @filter-by-anchor="anchorFilter = $event" />
         <button class="reset" @click="resetDemo">Reset demo</button>
       </section>
       <section class="right">
         <h2>Discussion</h2>
         <DiscussionPanel :paperId="currentPaperId" />
+        <ThreadsList :paperId="currentPaperId" />
         <hr />
         <IdentityPanel />
       </section>
@@ -31,9 +33,12 @@ import PaperPanel from '@/components/PaperPanel.vue';
 import AnchorsPanel from '@/components/AnchorsPanel.vue';
 import DiscussionPanel from '@/components/DiscussionPanel.vue';
 import IdentityPanel from '@/components/IdentityPanel.vue';
+import AnchorsList from '@/components/AnchorsList.vue';
+import ThreadsList from '@/components/ThreadsList.vue';
 
 const backendOk = ref(true);
 const currentPaperId = ref<string | null>(null);
+const anchorFilter = ref<string | null>(null);
 
 onMounted(async () => {
   try {

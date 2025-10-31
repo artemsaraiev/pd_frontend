@@ -10,12 +10,21 @@ export const paper = {
   async updateMeta(args: { id: string; title?: string }): Promise<void> {
     await post<{ ok: true }>(`/PaperIndex/updateMeta`, args);
   },
+  async get(args: { id: string }): Promise<{ id: string; title?: string }> {
+    const data = await post<{ result: { _id: string; title?: string } | null }>(`/PaperIndex/get`, args);
+    const r = data.result ?? { _id: args.id };
+    return { id: r._id, title: r.title };
+  },
 };
 
 export const anchored = {
   async create(args: { paperId: string; kind: AnchorKind; ref: string; snippet: string }): Promise<{ anchorId: string }> {
     const data = await post<{ result: string }>(`/AnchoredContext/create`, args);
     return { anchorId: data.result };
+  },
+  async listByPaper(args: { paperId: string }): Promise<{ anchors: Array<{ _id: string; kind: AnchorKind; ref: string; snippet: string }>}> {
+    const data = await post<{ result: any[] }>(`/AnchoredContext/listByPaper`, args);
+    return { anchors: data.result };
   },
 };
 
@@ -32,6 +41,18 @@ export const discussion = {
     const data = await post<{ result: string }>(`/DiscussionPub/reply`, args);
     return { replyId: data.result };
   },
+  async getPubIdByPaper(args: { paperId: string }): Promise<{ pubId: string | null }> {
+    const data = await post<{ result: string | null }>(`/DiscussionPub/getPubIdByPaper`, args);
+    return { pubId: data.result };
+  },
+  async listThreads(args: { pubId: string; anchorId?: string }): Promise<{ threads: Array<{ _id: string; author: string; body: string; anchorId?: string; createdAt: number; editedAt?: number }>}> {
+    const data = await post<{ result: any[] }>(`/DiscussionPub/listThreads`, args);
+    return { threads: data.result };
+  },
+  async listReplies(args: { threadId: string }): Promise<{ replies: Array<{ _id: string; author: string; body: string; createdAt: number; editedAt?: number }>}> {
+    const data = await post<{ result: any[] }>(`/DiscussionPub/listReplies`, args);
+    return { replies: data.result };
+  },
 };
 
 export const identity = {
@@ -40,6 +61,11 @@ export const identity = {
   },
   async addBadge(args: { userId: string; badge: string }): Promise<void> {
     await post<{ ok: true }>(`/IdentityVerification/addBadge`, args);
+  },
+  async get(args: { userId: string }): Promise<{ orcid?: string; affiliation?: string; badges: string[] }> {
+    const data = await post<{ result: { orcid?: string; affiliation?: string; badges?: string[] } | null }>(`/IdentityVerification/get`, args);
+    const r = data.result ?? {};
+    return { orcid: r.orcid, affiliation: r.affiliation, badges: r.badges ?? [] };
   },
 };
 
