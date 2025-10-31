@@ -9,12 +9,13 @@
 
 - User journey: see [`USER_JOURNEY.md`](USER_JOURNEY.md)
 - API specification: see [`API.md`](API.md)
+- Visual design study: see [`visual-design/study.md`](visual-design/study.md)
 
 ---
 
 ## Demo
 
-![Demo](./demo.gif)
+![Demo](./demo_new.gif)
 
 ## Run
 

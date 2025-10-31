@@ -24,14 +24,16 @@
     <p v-if="toast" class="toast">{{ toast }}</p>
     <p v-if="error" class="msg err">{{ error }}</p>
 
-    <div v-if="recent.length" class="recent">
-      <h4>Session Anchors</h4>
-      <ul>
+    <div class="recent">
+      <h4>Anchors ({{ recent.length }})</h4>
+      <p v-if="paperId && !recent.length" class="hint">No anchors yet.</p>
+      <ul v-if="paperId && recent.length" class="list">
         <li v-for="a in recent" :key="a.anchorId">
-          {{ a.anchorId }} — {{ a.kind }} — {{ a.ref }}
+          <button class="chip" @click="$emit('filter-by-anchor', a.anchorId)">{{ a.kind }} · {{ a.ref }}</button>
           <button class="copy" @click="copy(a.anchorId)">Copy id</button>
         </li>
       </ul>
+      <p v-else-if="!paperId" class="hint">Set a current paper first.</p>
     </div>
   </div>
 </template>
@@ -41,6 +43,7 @@ import { ref, watch } from 'vue';
 import { anchored, type AnchorKind } from '@/api/endpoints';
 
 const props = defineProps<{ paperId: string | null }>();
+defineEmits<{ (e: 'filter-by-anchor', anchorId: string): void }>();
 
 const kind = ref<AnchorKind>('Section');
 const refVal = ref('');
@@ -84,13 +87,15 @@ async function copy(id: string) {
 .panel { display: flex; flex-direction: column; gap: 8px; }
 .row { display: grid; grid-template-columns: 100px 1fr; gap: 8px; align-items: center; }
 input, select, textarea { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; }
-button { padding: 6px 10px; border: 1px solid #ddd; border-radius: 6px; background: #111827; color: white; }
+button { padding: 6px 10px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: white; }
 button:disabled { opacity: 0.6; }
-.toast { font-size: 12px; color: #2563eb; }
-.msg.err { font-size: 12px; color: #9b1c1c; }
+.toast { font-size: 12px; color: var(--info); }
+.msg.err { font-size: 12px; color: var(--error); }
 .recent { margin-top: 8px; }
-.recent ul { margin: 0; padding-left: 16px; }
-.copy { margin-left: 8px; padding: 2px 6px; border: 1px solid #ddd; border-radius: 4px; }
+.recent ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; }
+.copy { margin-left: 8px; padding: 2px 6px; border: 1px solid #ddd; border-radius: 4px; background: #fff; color: var(--brand); }
+.list { padding-left: 0; list-style: none; display: grid; gap: 6px; }
+.chip { padding: 2px 8px; border: 1px solid var(--brand); border-radius: 999px; background: #fff; color: var(--brand); }
 </style>
 
 

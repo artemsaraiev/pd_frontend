@@ -15,6 +15,10 @@ export const paper = {
     const r = data.result ?? { _id: args.id };
     return { id: r._id, title: r.title };
   },
+  async listRecent(args?: { limit?: number }): Promise<{ papers: Array<{ id: string; title?: string; createdAt?: number }> }> {
+    const data = await post<{ result: Array<{ _id: string; title?: string; createdAt?: number }> }>(`/PaperIndex/listRecent`, args ?? {});
+    return { papers: data.result.map(r => ({ id: r._id, title: r.title, createdAt: r.createdAt })) };
+  },
 };
 
 export const anchored = {
