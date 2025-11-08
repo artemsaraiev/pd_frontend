@@ -19,6 +19,10 @@ export const paper = {
     const data = await post<{ result: Array<{ _id: string; title?: string; createdAt?: number }> }>(`/PaperIndex/listRecent`, args ?? {});
     return { papers: data.result.map(r => ({ id: r._id, title: r.title, createdAt: r.createdAt })) };
   },
+  async searchArxiv(args: { q: string }): Promise<{ papers: Array<{ id: string; title?: string }> }> {
+    const data = await post<{ result: Array<{ id: string; title?: string }> }>(`/PaperIndex/searchArxiv`, args);
+    return { papers: data.result };
+  },
 };
 
 export const anchored = {
@@ -33,15 +37,15 @@ export const anchored = {
 };
 
 export const discussion = {
-  async open(args: { paperId: string }): Promise<{ pubId: string }> {
+  async open(args: { paperId: string; session?: string }): Promise<{ pubId: string }> {
     const data = await post<{ result: string }>(`/DiscussionPub/open`, args);
     return { pubId: data.result };
   },
-  async startThread(args: { pubId: string; author: string; body: string; anchorId?: string }): Promise<{ threadId: string }> {
+  async startThread(args: { pubId: string; author: string; body: string; anchorId?: string; session?: string }): Promise<{ threadId: string }> {
     const data = await post<{ result: string }>(`/DiscussionPub/startThread`, args);
     return { threadId: data.result };
   },
-  async reply(args: { threadId: string; author: string; body: string }): Promise<{ replyId: string }> {
+  async reply(args: { threadId: string; author: string; body: string; session?: string }): Promise<{ replyId: string }> {
     const data = await post<{ result: string }>(`/DiscussionPub/reply`, args);
     return { replyId: data.result };
   },
@@ -70,6 +74,18 @@ export const identity = {
     const data = await post<{ result: { orcid?: string; affiliation?: string; badges?: string[] } | null }>(`/IdentityVerification/get`, args);
     const r = data.result ?? {};
     return { orcid: r.orcid, affiliation: r.affiliation, badges: r.badges ?? [] };
+  },
+};
+
+export const session = {
+  async register(args: { username: string; password: string }): Promise<{ user?: string; error?: string }> {
+    return await post<{ user?: string; error?: string }>(`/UserAuthentication/register`, args);
+  },
+  async login(args: { username: string; password: string }): Promise<{ session: string } | { error: string }> {
+    return await post<{ session: string } | { error: string }>(`/login`, args);
+  },
+  async logout(args: { session: string }): Promise<{ status: string }> {
+    return await post<{ status: string }>(`/logout`, args);
   },
 };
 

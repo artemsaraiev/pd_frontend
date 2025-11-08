@@ -6,21 +6,54 @@
       <button class="primary" @click="emitSearch">Search</button>
     </div>
     <div class="right">
-      <button class="ghost">+ New Thread</button>
+      <button class="ghost" @click="goNewThread">+ New Thread</button>
       <div class="status" :class="{ ok: backendOk, bad: !backendOk }">{{ backendOk ? 'Connected' : 'Offline' }}</div>
+      <button v-if="!token" class="primary" @click="goLogin">Sign in</button>
+      <div v-else class="user">Signed in <a href="#" @click.prevent="logout">Sign out</a></div>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useSessionStore } from '@/stores/session';
+import { session, paper } from '@/api/endpoints';
 
 const props = defineProps<{ backendOk: boolean }>();
 const emit = defineEmits<{ (e: 'search', q: string): void }>();
 const q = ref('');
+const store = useSessionStore();
+const token = computed(() => store.token);
 
-function emitSearch() { emit('search', q.value); }
+async function emitSearch() {
+  const query = q.value.trim();
+  if (!query) return;
+  try {
+    const idLike = /^\d{4}\.\d{4,5}(v\d+)?$/;
+    if (idLike.test(query)) {
+      window.location.assign(`/paper/${encodeURIComponent(query)}`);
+      return;
+    }
+    const { papers } = await paper.searchArxiv({ q: query });
+    if (papers.length > 0) {
+      window.location.assign(`/paper/${encodeURIComponent(papers[0].id)}`);
+      return;
+    }
+  } catch {
+    // ignore network errors and fall through
+  }
+  window.location.assign(`/paper/${encodeURIComponent(query)}`);
+}
 function goHome() { window.location.assign('/'); }
+function goLogin() { window.location.assign('/login'); }
+function goNewThread() { window.location.assign('/'); }
+async function logout() {
+  if (store.token) {
+    try { await session.logout({ session: store.token }); } catch {}
+  }
+  store.clear();
+  window.location.assign('/');
+}
 </script>
 
 <style scoped>

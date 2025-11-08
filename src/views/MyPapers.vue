@@ -12,13 +12,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { paper } from '@/api/endpoints';
+import { useSessionStore } from '@/stores/session';
 
 const papers = ref<Array<{ id: string; title?: string }>>([]);
+const store = useSessionStore();
 
 function load() {
-  const ids: string[] = JSON.parse(localStorage.getItem('libraryPaperIds') || '[]');
+  if (!store.userId) { papers.value = []; return; }
+  const key = `library:${store.userId}`;
+  const ids: string[] = JSON.parse(localStorage.getItem(key) || '[]');
   papers.value = [];
   Promise.all(ids.map(async (id) => {
     const { title } = await paper.get({ id });
@@ -27,13 +31,16 @@ function load() {
 }
 
 function remove(id: string) {
-  const ids: string[] = JSON.parse(localStorage.getItem('libraryPaperIds') || '[]');
+  if (!store.userId) return;
+  const key = `library:${store.userId}`;
+  const ids: string[] = JSON.parse(localStorage.getItem(key) || '[]');
   const next = ids.filter(x => x !== id);
-  localStorage.setItem('libraryPaperIds', JSON.stringify(next));
+  localStorage.setItem(key, JSON.stringify(next));
   load();
 }
 
 onMounted(load);
+watch(() => store.userId, load);
 </script>
 
 <style scoped>

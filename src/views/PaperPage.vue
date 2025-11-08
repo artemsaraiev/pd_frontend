@@ -30,25 +30,39 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, computed } from 'vue';
 import DiscussionPanel from '@/components/DiscussionPanel.vue';
 import AnchorsPanel from '@/components/AnchorsPanel.vue';
 import { paper } from '@/api/endpoints';
 
 const props = defineProps<{ id: string }>();
+const resolvedId = ref<string>(props.id);
 const anchorFilter = ref<string | null>(null);
 const header = reactive<{ title?: string; doi?: string; link?: string; authors?: string }>({});
 const anchorsBox = ref<HTMLElement | null>(null);
+import { useSessionStore } from '@/stores/session';
+const session = useSessionStore();
 const banner = ref('');
 
-const pdfLink = `https://arxiv.org/pdf/${encodeURIComponent(props.id)}.pdf`;
+const pdfLink = computed(() => `https://arxiv.org/pdf/${encodeURIComponent(resolvedId.value)}.pdf`);
 
 onMounted(async () => {
   try {
-    const { id, title } = await paper.get({ id: props.id });
+    const idLike = /^\d{4}\.\d{4,5}(v\d+)?$/;
+    if (!idLike.test(props.id)) {
+      // Resolve by search
+      const { papers } = await paper.searchArxiv({ q: props.id });
+      if (papers.length > 0) {
+        resolvedId.value = papers[0].id;
+      } else {
+        banner.value = 'No matching paper found on arXiv. Try refining your search.';
+        return;
+      }
+    }
+    const { id, title } = await paper.get({ id: resolvedId.value });
     header.title = title;
-    header.doi = id;
-    header.link = `https://arxiv.org/abs/${encodeURIComponent(id)}`;
+    header.doi = resolvedId.value;
+    header.link = `https://arxiv.org/abs/${encodeURIComponent(resolvedId.value)}`;
     if (!title) {
       banner.value = 'This paper is not yet in your index.';
     }
@@ -59,21 +73,22 @@ function scrollToAnchors() {
   anchorsBox.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-const id = props.id;
+const id = computed(() => resolvedId.value);
 
 function saveToLibrary() {
-  const key = 'libraryPaperIds';
+  if (!session.userId) { alert('Please sign in first.'); return; }
+  const key = `library:${session.userId}`;
   const ids: string[] = JSON.parse(localStorage.getItem(key) || '[]');
-  if (!ids.includes(id)) {
-    ids.push(id);
+  if (!ids.includes(id.value)) {
+    ids.push(id.value);
     localStorage.setItem(key, JSON.stringify(ids));
   }
 }
 
 async function ensurePaper() {
   try {
-    await paper.ensure({ id });
-    const { title } = await paper.get({ id });
+    await paper.ensure({ id: resolvedId.value });
+    const { title } = await paper.get({ id: resolvedId.value });
     header.title = title;
     banner.value = '';
   } catch (e: any) {

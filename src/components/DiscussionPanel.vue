@@ -6,25 +6,25 @@
       <label>Paper</label>
       <input :value="paperId ?? ''" disabled />
     </div>
-    <button :disabled="busyOpen || !paperId || pubOpened" @click="onOpenPub">{{ pubOpened ? 'Pub opened' : (busyOpen ? 'Opening…' : 'Open Pub') }}</button>
+    <button :disabled="busyOpen || !paperId || pubOpened || !session.token" @click="onOpenPub">{{ !session.token ? 'Sign in to open' : (pubOpened ? 'Pub opened' : (busyOpen ? 'Opening…' : 'Open Pub')) }}</button>
     <small v-if="busyOpen">Loading…</small>
     <p v-if="pubMsg" class="msg ok">{{ pubMsg }}</p>
     <p v-if="errorOpen" class="msg err">{{ errorOpen }}</p>
 
     <h3>Start a thread</h3>
-    <div class="row">
+    <div class="row" v-if="!session.token">
       <label>Author</label>
-      <input v-model.trim="author" />
+      <input disabled placeholder="Sign in to post" />
     </div>
     <div class="row">
-      <label>Body</label>
+      <label>Topic</label>
       <textarea v-model.trim="body" rows="3" />
     </div>
     <div class="row">
       <label>Anchor Id</label>
       <input v-model.trim="anchorId" placeholder="optional" />
     </div>
-    <button :disabled="busyThread || !pubId || !author || !body" @click="onStartThread">{{ busyThread ? 'Posting…' : 'Start Thread' }}</button>
+    <button :disabled="busyThread || !pubId || !body || !session.token" @click="onStartThread">{{ !session.token ? 'Sign in to post' : (busyThread ? 'Posting…' : 'Start Thread') }}</button>
     <small v-if="busyThread">Loading…</small>
     <p v-if="threadMsg" class="msg ok">{{ threadMsg }}</p>
     <p v-if="errorThread" class="msg err">{{ errorThread }}</p>
@@ -38,7 +38,7 @@
       <label>Reply Body</label>
       <textarea v-model.trim="replyBody" rows="2" />
     </div>
-    <button :disabled="busyReply || !replyThreadId || !author || !replyBody" @click="onReply">{{ busyReply ? 'Replying…' : 'Reply' }}</button>
+    <button :disabled="busyReply || !replyThreadId || !replyBody || !session.token" @click="onReply">{{ !session.token ? 'Sign in to reply' : (busyReply ? 'Replying…' : 'Reply') }}</button>
     <small v-if="busyReply">Loading…</small>
     <p v-if="replyMsg" class="msg ok">{{ replyMsg }}</p>
     <p v-if="errorReply" class="msg err">{{ errorReply }}</p>
@@ -58,6 +58,7 @@
           <div class="meta">
             <strong>{{ t.author }}</strong>
             <span v-if="t.anchorId" class="anchor">#{{ t.anchorId }}</span>
+            <a href="#" class="reply-link" @click.prevent="replyTo(t.id)">Reply</a>
           </div>
           <p class="body">{{ t.body }}</p>
           <ul class="replies">
@@ -153,7 +154,7 @@ async function onOpenPub() {
   if (!props.paperId) return;
   busyOpen.value = true; errorOpen.value=''; pubMsg.value='';
   try {
-    const res = await discussion.open({ paperId: props.paperId });
+    const res = await discussion.open({ paperId: props.paperId, session: session.token || undefined });
     pubId.value = res.pubId;
     pubMsg.value = `Pub opened (pubId: ${res.pubId})`;
     pubOpened.value = true;
@@ -182,11 +183,9 @@ async function onStartThread() {
   if (!pubId.value) return;
   busyThread.value = true; errorThread.value=''; threadMsg.value='';
   try {
-    const res = await discussion.startThread({ pubId: pubId.value, author: author.value, body: body.value, anchorId: anchorId.value || undefined });
+    const res = await discussion.startThread({ pubId: pubId.value, author: session.userId || 'anonymous', body: body.value, anchorId: anchorId.value || undefined, session: session.token || undefined });
     threadMsg.value = `Thread created (id: ${res.threadId})`;
     actions.value.unshift(`Thread ${res.threadId} created${anchorId.value ? ` (anchor: ${anchorId.value})` : ''}`);
-    // Prepend new thread locally and also refresh from backend to ensure consistency
-    threads.value.unshift({ id: res.threadId, author: author.value, body: body.value, anchorId: anchorId.value || undefined, replies: [] });
     body.value = '';
     anchorId.value = '';
     replyThreadId.value = res.threadId;
@@ -201,11 +200,9 @@ async function onStartThread() {
 async function onReply() {
   busyReply.value = true; errorReply.value=''; replyMsg.value='';
   try {
-    const res = await discussion.reply({ threadId: replyThreadId.value, author: author.value, body: replyBody.value });
+    const res = await discussion.reply({ threadId: replyThreadId.value, author: session.userId || 'anonymous', body: replyBody.value, session: session.token || undefined });
     replyMsg.value = `Reply created (id: ${res.replyId})`;
     actions.value.unshift(`Reply ${res.replyId} added to ${replyThreadId.value}`);
-    const t = threads.value.find(t => t.id === replyThreadId.value);
-    if (t) t.replies.push({ id: res.replyId, author: author.value, body: replyBody.value });
     replyBody.value = '';
     await loadThreads();
   } catch (e: any) {
@@ -213,6 +210,12 @@ async function onReply() {
   } finally {
     busyReply.value = false;
   }
+}
+
+function replyTo(tid: string) {
+  replyThreadId.value = tid;
+  const el = document.querySelector('.panel .row textarea');
+  (el as HTMLTextAreaElement | null)?.focus();
 }
 </script>
 
@@ -230,6 +233,7 @@ button:disabled { opacity: 0.6; }
 .threads { list-style: none; padding-left: 0; display: grid; gap: 8px; }
 .card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .meta { display: flex; gap: 8px; align-items: baseline; }
+.reply-link { margin-left: auto; font-size: 12px; }
 .anchor { background: var(--chip-bg); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; font-size: 12px; }
 .body { margin: 6px 0; }
 .replies { padding-left: 16px; }

@@ -4,7 +4,7 @@ export const routes = [
   { path: '/', name: 'home', component: () => import('./views/HomeFeed.vue') },
   { path: '/paper/:id', name: 'paper', component: () => import('./views/PaperPage.vue'), props: true },
   { path: '/my', name: 'my', component: () => import('./views/MyPapers.vue') },
-  { path: '/explore', name: 'explore', component: () => import('./views/Explore.vue') },
+  { path: '/login', name: 'login', component: () => import('./views/Login.vue') },
 ];
 
 const router = createRouter({
