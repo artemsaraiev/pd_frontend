@@ -50,14 +50,9 @@ onMounted(async () => {
   try {
     const idLike = /^\d{4}\.\d{4,5}(v\d+)?$/;
     if (!idLike.test(props.id)) {
-      // Resolve by search
-      const { papers } = await paper.searchArxiv({ q: props.id });
-      if (papers.length > 0) {
-        resolvedId.value = papers[0].id;
-      } else {
-        banner.value = 'No matching paper found on arXiv. Try refining your search.';
-        return;
-      }
+      // Redirect to search results instead of auto-selecting the first match
+      window.location.assign(`/search?q=${encodeURIComponent(props.id)}`);
+      return;
     }
     const { id, title } = await paper.get({ id: resolvedId.value });
     header.title = title;

@@ -4,13 +4,17 @@
 - Frontend API routes remain the same; no changes required here unless backend endpoints change or passthrough exclusions are updated.
 
 Completed changes:
-- No frontend code changes yet.
+- Search UX:
+  - Added results page `src/views/SearchResults.vue` and route `/search?q=...`.
+  - `src/components/TopNav.vue` now routes to `/search` (and opens `/paper/:id` only when the input looks like an arXiv id).
+  - `src/views/PaperPage.vue` no longer auto-picks the first arXiv result; if the URL param is not an arXiv id, it redirects to `/search?q=...`.
+  - Added `src/env.d.ts` for Vue SFC typing to satisfy TS.
 
 Latest updates:
 - Auth UI:
   - Added `src/views/Login.vue`, persisted session in `src/stores/session.ts`, and added Sign in/Sign out in `src/components/TopNav.vue`.
 - Search:
-  - Top search resolves titles via backend `/api/PaperIndex/searchArxiv` and navigates to the arXiv id; paper page also resolves non-id queries and shows a helpful banner on no-match.
+  - The new results page calls backend `/api/PaperIndex/searchArxiv` and renders a list of arXiv matches with links to our paper page and arXiv (abs/pdf). This replaces the previous behavior that auto-navigated to the first result.
 - Removed Explore:
   - Deleted `src/views/Explore.vue` and its route/link.
 - Discussion UX:

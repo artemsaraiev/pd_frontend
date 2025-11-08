@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useSessionStore } from '@/stores/session';
-import { session, paper } from '@/api/endpoints';
+import { session } from '@/api/endpoints';
 
 const props = defineProps<{ backendOk: boolean }>();
 const emit = defineEmits<{ (e: 'search', q: string): void }>();
@@ -28,21 +28,12 @@ const token = computed(() => store.token);
 async function emitSearch() {
   const query = q.value.trim();
   if (!query) return;
-  try {
-    const idLike = /^\d{4}\.\d{4,5}(v\d+)?$/;
-    if (idLike.test(query)) {
-      window.location.assign(`/paper/${encodeURIComponent(query)}`);
-      return;
-    }
-    const { papers } = await paper.searchArxiv({ q: query });
-    if (papers.length > 0) {
-      window.location.assign(`/paper/${encodeURIComponent(papers[0].id)}`);
-      return;
-    }
-  } catch {
-    // ignore network errors and fall through
+  const idLike = /^\d{4}\.\d{4,5}(v\d+)?$/;
+  if (idLike.test(query)) {
+    window.location.assign(`/paper/${encodeURIComponent(query)}`);
+    return;
   }
-  window.location.assign(`/paper/${encodeURIComponent(query)}`);
+  window.location.assign(`/search?q=${encodeURIComponent(query)}`);
 }
 function goHome() { window.location.assign('/'); }
 function goLogin() { window.location.assign('/login'); }
