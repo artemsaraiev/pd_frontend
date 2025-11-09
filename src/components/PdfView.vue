@@ -11,6 +11,8 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
+import 'pdfjs-dist/web/pdf_viewer.css';
+import { PDFPageView, EventBus } from 'pdfjs-dist/web/pdf_viewer.mjs';
 // Use Vite's asset url import to resolve worker at build-time
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -33,6 +35,7 @@ const loading = ref(true);
 const error = ref('');
 
 let cancelled = false;
+let renderToken = 0;
 let pageWrappers: HTMLElement[] = [];
 const highlights: Record<number, Array<{ x: number; y: number; w: number; h: number }>> = {};
 
@@ -54,15 +57,17 @@ function drawHighlights(pageIndex: number, width: number, height: number) {
     overlay.className = 'overlay';
     wrapper.appendChild(overlay);
   }
+  const w = wrapper.clientWidth;
+  const h = wrapper.clientHeight;
   overlay.innerHTML = '';
   const list = highlights[pageIndex] || [];
   for (const r of list) {
     const div = document.createElement('div');
     div.className = 'hl';
-    div.style.left = `${Math.round(r.x * width)}px`;
-    div.style.top = `${Math.round(r.y * height)}px`;
-    div.style.width = `${Math.round(r.w * width)}px`;
-    div.style.height = `${Math.round(r.h * height)}px`;
+    div.style.left = `${Math.round(r.x * w)}px`;
+    div.style.top = `${Math.round(r.y * h)}px`;
+    div.style.width = `${Math.round(r.w * w)}px`;
+    div.style.height = `${Math.round(r.h * h)}px`;
     overlay.appendChild(div);
   }
 }
@@ -78,7 +83,13 @@ function parseRef(ref: string): { page?: number; rects?: Array<{ x:number; y:num
       for (const seg of rectsPart.split('|')) {
         const parts = seg.split(',').map(s => parseFloat(s));
         if (parts.length === 4 && parts.every(n => !Number.isNaN(n))) {
-          rects.push({ x: parts[0], y: parts[1], w: parts[2], h: parts[3] });
+          const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+          rects.push({
+            x: clamp01(parts[0]),
+            y: clamp01(parts[1]),
+            w: clamp01(parts[2]),
+            h: clamp01(parts[3]),
+          });
         }
       }
     }
@@ -106,12 +117,17 @@ async function loadExistingAnchors() {
 }
 
 async function renderPdf() {
+  const myToken = ++renderToken;
   error.value = '';
   loading.value = true;
   // Clear existing canvases
   if (pagesContainer.value) {
     pagesContainer.value.innerHTML = '';
   }
+  // Reset state per render
+  pageWrappers.forEach(w => w?.remove());
+  pageWrappers = [];
+  Object.keys(highlights).forEach(k => delete (highlights as any)[k]);
   try {
     const candidates = (props.sources && props.sources.length ? props.sources : (props.src ? [props.src] : []))
       .filter(Boolean) as string[];
@@ -134,74 +150,38 @@ async function renderPdf() {
     }
     pageWrappers = [];
     await loadExistingAnchors();
-    if (cancelled) return;
+    if (cancelled || myToken !== renderToken) return;
     const total = pdf.numPages;
+    const eventBus = new EventBus();
+    const container = pagesContainer.value!;
+    const containerWidth = container.clientWidth || 800;
     for (let i = 1; i <= total; i++) {
-      if (cancelled) return;
+      if (cancelled || myToken !== renderToken) return;
       const page = await pdf.getPage(i);
-      const container = pagesContainer.value!;
       const wrapper = document.createElement('div');
       wrapper.className = 'page-wrapper';
       container.appendChild(wrapper);
       pageWrappers[i - 1] = wrapper;
-      const canvas = document.createElement('canvas');
-      canvas.className = 'page-canvas';
-      wrapper.appendChild(canvas);
-      const context = canvas.getContext('2d')!;
-      // Fit-to-width scaling
+      // Determine scale
       const baseViewport = page.getViewport({ scale: 1 });
-      const cssWidth = wrapper.clientWidth || container.clientWidth || baseViewport.width;
+      const cssWidth = containerWidth;
       const zoom = props.zoom ?? 1;
       const fit = props.fit ?? true;
       const scale = fit ? (cssWidth / baseViewport.width) * zoom : zoom;
-      const viewport = page.getViewport({ scale });
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(viewport.width * dpr);
-      canvas.height = Math.floor(viewport.height * dpr);
-      canvas.style.width = `${Math.floor(viewport.width)}px`;
-      canvas.style.height = `${Math.floor(viewport.height)}px`;
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      await page.render({ canvasContext: context, viewport }).promise;
-      // Text layer to enable text selection
-      try {
-        const textContent = await page.getTextContent();
-        const textLayerDiv = document.createElement('div');
-        textLayerDiv.className = 'textLayer';
-        textLayerDiv.style.width = `${Math.floor(viewport.width)}px`;
-        textLayerDiv.style.height = `${Math.floor(viewport.height)}px`;
-        wrapper.appendChild(textLayerDiv);
-        // Dynamically import legacy viewer module for text layer when available
-        try {
-          const mod: any = await import('pdfjs-dist/legacy/web/pdf_viewer.mjs');
-          if (mod && mod.renderTextLayer) {
-            await mod.renderTextLayer({
-              textContentSource: textContent,
-              container: textLayerDiv,
-              viewport,
-              textDivs: [],
-            }).promise;
-          }
-        } catch {
-          // Fallback: place simple text divs; selection won't match perfectly but enables copy/selection
-          for (const item of (textContent.items as any[])) {
-            const span = document.createElement('span');
-            span.textContent = (item.str as string) ?? '';
-            const { transform, width, height, fontSize } = item;
-            // Basic positioning approximation
-            const x = transform[4];
-            const y = transform[5] - fontSize;
-            span.style.position = 'absolute';
-            span.style.left = `${x}px`;
-            span.style.top = `${y}px`;
-            span.style.width = `${width || 0}px`;
-            span.style.height = `${height || fontSize}px`;
-            span.style.whiteSpace = 'pre';
-            span.style.color = 'transparent';
-            textLayerDiv.appendChild(span);
-          }
-        }
-      } catch {}
-      drawHighlights(i - 1, viewport.width, viewport.height);
+      // Use PDFPageView to draw canvas + text layer
+      const pageView: any = new PDFPageView({
+        container: wrapper,
+        id: i,
+        scale,
+        defaultViewport: baseViewport,
+        eventBus,
+        textLayerMode: 1, // plain enable
+        annotationMode: 1,
+      });
+      await pageView.setPdfPage(page);
+      await pageView.draw();
+      // Draw highlights using wrapper client size
+      drawHighlights(i - 1, 0, 0);
     }
   } catch (e: any) {
     error.value = e?.message ?? String(e);
@@ -248,19 +228,23 @@ function onMouseUp() {
   }
   if (pageIndex < 0) return;
   const wrapper = pageWrappers[pageIndex];
-  const wrapRect = wrapper.getBoundingClientRect();
+  const textLayer = wrapper.querySelector('.textLayer') as HTMLElement | null;
+  if (!textLayer) return;
+  const tlRect = textLayer.getBoundingClientRect();
   const range = sel.getRangeAt(0);
   const rectList = Array.from(range.getClientRects());
   if (!rectList.length) return;
   if (!confirm('Highlight & discuss this selection?')) return;
   const normRects: Array<{ x:number; y:number; w:number; h:number }> = [];
   for (const r of rectList.slice(0, 8)) {
-    // Normalize to wrapper
-    const x = Math.max(0, (r.left - wrapRect.left) / wrapRect.width);
-    const y = Math.max(0, (r.top - wrapRect.top) / wrapRect.height);
-    const w = Math.min(1, r.width / wrapRect.width);
-    const h = Math.min(1, r.height / wrapRect.height);
-    if (w > 0 && h > 0) normRects.push({ x, y, w, h });
+    // Normalize to textLayer box
+    const x = (r.left - tlRect.left) / tlRect.width;
+    const y = (r.top  - tlRect.top)  / tlRect.height;
+    const w = r.width  / tlRect.width;
+    const h = r.height / tlRect.height;
+    if (w > 0 && h > 0 && x >= 0 && y >= 0 && x <= 1 && y <= 1) {
+      normRects.push({ x, y, w, h });
+    }
   }
   if (!normRects.length) return;
   // Persist via AnchoredContext
@@ -280,10 +264,7 @@ function onMouseUp() {
       });
       highlights[pageIndex] = (highlights[pageIndex] || []).concat(normRects);
       // Repaint current page overlay
-      const canvas = wrapper.querySelector('canvas') as HTMLCanvasElement | null;
-      const width = canvas ? parseInt(canvas.style.width) || canvas.width : wrapRect.width;
-      const height = canvas ? parseInt(canvas.style.height) || canvas.height : wrapRect.height;
-      drawHighlights(pageIndex, width, height);
+      drawHighlights(pageIndex, 0, 0);
       emit('anchorCreated', anchorId);
       try { window.dispatchEvent(new CustomEvent('anchor-created', { detail: anchorId })); } catch {}
       try { sel.removeAllRanges(); } catch {}
@@ -299,8 +280,8 @@ function onMouseUp() {
 .viewer { display: block; }
 .loading { color: #666; padding: 8px 0; }
 .error { color: var(--error); }
-.pages { display: grid; gap: 12px; }
-.page-wrapper { position: relative; }
+.pages { display: block; }
+.page-wrapper { position: relative; margin: 0 auto 6px; width: fit-content; }
 .page-canvas {
   display: block;
   margin: 0 auto;
@@ -309,25 +290,19 @@ function onMouseUp() {
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
 }
-.textLayer {
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: transparent; /* do not show duplicate text over canvas */
-  user-select: text;
-  pointer-events: auto;
-}
+/* Use default pdfjs textLayer styles from pdf_viewer.css for correct selection */
 .overlay {
   position: absolute;
   left: 0; top: 0; right: 0; bottom: 0;
   pointer-events: none;
+  z-index: 3;
 }
 .hl {
   position: absolute;
   background: rgba(255, 230, 0, 0.35);
   outline: 1px solid rgba(255, 200, 0, 0.9);
   border-radius: 2px;
-  pointer-events: auto;
+  pointer-events: none;
 }
 </style>
 

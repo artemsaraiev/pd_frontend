@@ -11,4 +11,9 @@ declare module '*?url' {
   export default src;
 }
 
+declare module 'pdfjs-dist/web/pdf_viewer.mjs' {
+  export const EventBus: any;
+  export const PDFPageView: any;
+}
+
 
