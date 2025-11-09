@@ -43,7 +43,7 @@ function onSearch(q: string) {
 .layout { display: grid; grid-template-columns: 260px 1fr 320px; gap: 16px; padding: 16px; flex: 1; overflow: auto; }
 .sidebar-left { background: #fafafa; border-right: 1px solid var(--border); }
 .sidebar-right { background: #fafafa; border-left: 1px solid var(--border); }
-.content { max-width: 900px; margin: 0 auto; }
+.content { max-width: 1200px; margin: 0 auto; }
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 220px 1fr; }
   .sidebar-right { display: none; }

@@ -19,7 +19,9 @@
 
     <div class="columns">
       <section class="center">
-        <PdfView :sources="[pdfProxyLink, pdfArxivLink]" />
+        <div class="pdf-scroll">
+          <PdfView :paperId="id" :sources="[pdfProxyLink, pdfArxivLink]" @anchorCreated="anchorFilter = $event" />
+        </div>
       </section>
       <aside class="right card" ref="anchorsBox">
         <h3>Discussion</h3>
@@ -106,6 +108,7 @@ async function ensurePaper() {
 .inline { padding: 2px 8px; }
 .columns { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
 .center { display: block; }
+.pdf-scroll { height: calc(100vh - 220px); overflow: auto; }
 .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 .primary { background: var(--brand); color: #fff; border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
 .ghost { background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
