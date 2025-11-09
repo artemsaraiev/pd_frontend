@@ -20,39 +20,37 @@
     <div class="columns">
       <section class="center">
         <div class="pdf-scroll">
-          <PdfView :paperId="id" :sources="[pdfProxyLink, pdfArxivLink]" @anchorCreated="anchorFilter = $event" />
+          <div class="toolbar">
+            <button class="ghost" @click="zoomOut">-</button>
+            <span class="z">{{ Math.round(zoom * 100) }}%</span>
+            <button class="ghost" @click="zoomIn">+</button>
+            <button class="ghost" @click="fitWidth">Fit width</button>
+          </div>
+          <PdfView :paperId="id" :sources="[pdfProxyLink, pdfArxivLink]" :zoom="zoom" :fit="fit" />
         </div>
       </section>
-      <aside class="right card" ref="anchorsBox">
-        <h3>Discussion</h3>
-        <DiscussionPanel :paperId="id" :anchorFilterProp="anchorFilter" />
-        <div class="divider"></div>
-        <h3>Anchors</h3>
-        <AnchorsPanel :paperId="id" @filter-by-anchor="anchorFilter = $event" />
-      </aside>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue';
-import DiscussionPanel from '@/components/DiscussionPanel.vue';
-import AnchorsPanel from '@/components/AnchorsPanel.vue';
 import PdfView from '@/components/PdfView.vue';
 import { paper } from '@/api/endpoints';
 import { BASE_URL } from '@/api/client';
 
 const props = defineProps<{ id: string }>();
 const resolvedId = ref<string>(props.id);
-const anchorFilter = ref<string | null>(null);
 const header = reactive<{ title?: string; doi?: string; link?: string; authors?: string }>({});
-const anchorsBox = ref<HTMLElement | null>(null);
 import { useSessionStore } from '@/stores/session';
 const session = useSessionStore();
 const banner = ref('');
 
 const pdfProxyLink = computed(() => `${BASE_URL}/pdf/${encodeURIComponent(resolvedId.value)}`);
 const pdfArxivLink = computed(() => `https://arxiv.org/pdf/${encodeURIComponent(resolvedId.value)}.pdf`);
+
+const zoom = ref(1);
+const fit = ref(true);
 
 onMounted(async () => {
   try {
@@ -72,9 +70,7 @@ onMounted(async () => {
   } catch {}
 });
 
-function scrollToAnchors() {
-  anchorsBox.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+function scrollToAnchors() { /* no-op, discussion moved to right sidebar */ }
 
 const id = computed(() => resolvedId.value);
 
@@ -98,6 +94,10 @@ async function ensurePaper() {
     banner.value = String(e?.message ?? 'Failed to ensure paper');
   }
 }
+
+function zoomIn() { fit.value = false; zoom.value = Math.min(zoom.value + 0.1, 3); }
+function zoomOut() { fit.value = false; zoom.value = Math.max(zoom.value - 0.1, 0.3); }
+function fitWidth() { fit.value = true; }
 </script>
 
 <style scoped>
@@ -106,14 +106,16 @@ async function ensurePaper() {
 .title-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .actions { display: flex; gap: 8px; }
 .inline { padding: 2px 8px; }
-.columns { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+.columns { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .center { display: block; }
-.pdf-scroll { height: calc(100vh - 220px); overflow: auto; }
+.pdf-scroll { height: calc(100vh - 220px); overflow: auto; position: relative; }
 .card { border: 1px solid var(--border); border-radius: 8px; background: #fff; padding: 12px 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 .primary { background: var(--brand); color: #fff; border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
 .ghost { background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
 .banner { margin-top: 8px; color: var(--error); }
 .divider { height: 1px; background: var(--border); margin: 12px 0; }
+.toolbar { position: sticky; top: 0; display: flex; gap: 8px; padding: 8px 0; background: #fff; z-index: 5; border-bottom: 1px solid var(--border); }
+.toolbar .z { width: 52px; text-align: center; line-height: 28px; }
 @media (max-width: 1100px) {
   .columns { grid-template-columns: 1fr; }
 }

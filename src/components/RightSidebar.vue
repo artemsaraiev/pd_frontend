@@ -1,10 +1,49 @@
 <template>
   <div class="rs">
-    <!-- Intentionally empty until we have real data endpoints -->
+    <div v-if="paperId" class="card">
+      <h3>Discussion</h3>
+      <DiscussionPanel :paperId="paperId" :anchorFilterProp="anchorFilter" />
+    </div>
+    <div v-if="paperId" class="card">
+      <h3>Anchors</h3>
+      <AnchorsPanel :paperId="paperId" @filter-by-anchor="anchorFilter = $event" />
+    </div>
+    <div v-else class="card">
+      <small>No paper selected.</small>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import DiscussionPanel from '@/components/DiscussionPanel.vue';
+import AnchorsPanel from '@/components/AnchorsPanel.vue';
+
+const route = useRoute();
+const paperId = ref<string | null>(null);
+const anchorFilter = ref<string | null>(null);
+
+function sync() {
+  const id = (route.params as any)?.id as string | undefined;
+  paperId.value = id ?? null;
+}
+
+function onAnchorCreated(e: Event) {
+  const custom = e as CustomEvent<string>;
+  if (custom.detail) {
+    anchorFilter.value = custom.detail;
+  }
+}
+
+onMounted(() => {
+  sync();
+  window.addEventListener('anchor-created', onAnchorCreated);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('anchor-created', onAnchorCreated);
+});
+watch(() => route.fullPath, sync);
 </script>
 
 <style scoped>

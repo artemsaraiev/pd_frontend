@@ -19,9 +19,13 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 // Configure worker
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc;
 
+const emit = defineEmits<{ (e: 'anchorCreated', anchorId: string): void }>();
 const props = defineProps<{
   src?: string;
   sources?: string[];
+  paperId?: string;
+  zoom?: number;
+  fit?: boolean;
 }>();
 
 const pagesContainer = ref<HTMLElement | null>(null);
@@ -29,6 +33,8 @@ const loading = ref(true);
 const error = ref('');
 
 let cancelled = false;
+let pageWrappers: HTMLElement[] = [];
+const highlights: Record<number, Array<{ x: number; y: number; w: number; h: number }>> = {};
 
 async function tryLoad(url: string) {
   const loadingTask = (pdfjsLib as any).getDocument({
@@ -37,6 +43,66 @@ async function tryLoad(url: string) {
   });
   const pdf = await loadingTask.promise;
   return pdf;
+}
+
+function drawHighlights(pageIndex: number, width: number, height: number) {
+  const wrapper = pageWrappers[pageIndex];
+  if (!wrapper) return;
+  let overlay = wrapper.querySelector('.overlay') as HTMLElement | null;
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    wrapper.appendChild(overlay);
+  }
+  overlay.innerHTML = '';
+  const list = highlights[pageIndex] || [];
+  for (const r of list) {
+    const div = document.createElement('div');
+    div.className = 'hl';
+    div.style.left = `${Math.round(r.x * width)}px`;
+    div.style.top = `${Math.round(r.y * height)}px`;
+    div.style.width = `${Math.round(r.w * width)}px`;
+    div.style.height = `${Math.round(r.h * height)}px`;
+    overlay.appendChild(div);
+  }
+}
+
+function parseRef(ref: string): { page?: number; rects?: Array<{ x:number; y:number; w:number; h:number }> } {
+  // Example: "p=3;rects=0.12,0.34,0.4,0.06|0.15,0.41,0.22,0.05"
+  try {
+    const m = ref.match(/p=(\d+)/);
+    const page = m ? parseInt(m[1], 10) : undefined;
+    const rectsPart = ref.split('rects=')[1];
+    const rects: Array<{ x:number; y:number; w:number; h:number }> = [];
+    if (rectsPart) {
+      for (const seg of rectsPart.split('|')) {
+        const parts = seg.split(',').map(s => parseFloat(s));
+        if (parts.length === 4 && parts.every(n => !Number.isNaN(n))) {
+          rects.push({ x: parts[0], y: parts[1], w: parts[2], h: parts[3] });
+        }
+      }
+    }
+    return { page, rects };
+  } catch {
+    return {};
+  }
+}
+
+async function loadExistingAnchors() {
+  if (!props.paperId) return;
+  try {
+    const { anchored } = await import('@/api/endpoints');
+    const { anchors } = await anchored.listByPaper({ paperId: props.paperId });
+    for (const a of anchors) {
+      const { page, rects } = parseRef(a.ref || '');
+      if (page != null && rects && rects.length) {
+        const idx = page - 1;
+        highlights[idx] = (highlights[idx] || []).concat(rects);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 async function renderPdf() {
@@ -66,20 +132,28 @@ async function renderPdf() {
     if (!pdf) {
       throw lastErr ?? new Error('Failed to load PDF');
     }
+    pageWrappers = [];
+    await loadExistingAnchors();
     if (cancelled) return;
     const total = pdf.numPages;
     for (let i = 1; i <= total; i++) {
       if (cancelled) return;
       const page = await pdf.getPage(i);
       const container = pagesContainer.value!;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'page-wrapper';
+      container.appendChild(wrapper);
+      pageWrappers[i - 1] = wrapper;
       const canvas = document.createElement('canvas');
       canvas.className = 'page-canvas';
-      container.appendChild(canvas);
+      wrapper.appendChild(canvas);
       const context = canvas.getContext('2d')!;
       // Fit-to-width scaling
       const baseViewport = page.getViewport({ scale: 1 });
-      const cssWidth = container.clientWidth || baseViewport.width;
-      const scale = cssWidth / baseViewport.width;
+      const cssWidth = wrapper.clientWidth || container.clientWidth || baseViewport.width;
+      const zoom = props.zoom ?? 1;
+      const fit = props.fit ?? true;
+      const scale = fit ? (cssWidth / baseViewport.width) * zoom : zoom;
       const viewport = page.getViewport({ scale });
       const dpr = window.devicePixelRatio || 1;
       canvas.width = Math.floor(viewport.width * dpr);
@@ -88,6 +162,46 @@ async function renderPdf() {
       canvas.style.height = `${Math.floor(viewport.height)}px`;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       await page.render({ canvasContext: context, viewport }).promise;
+      // Text layer to enable text selection
+      try {
+        const textContent = await page.getTextContent();
+        const textLayerDiv = document.createElement('div');
+        textLayerDiv.className = 'textLayer';
+        textLayerDiv.style.width = `${Math.floor(viewport.width)}px`;
+        textLayerDiv.style.height = `${Math.floor(viewport.height)}px`;
+        wrapper.appendChild(textLayerDiv);
+        // Dynamically import legacy viewer module for text layer when available
+        try {
+          const mod: any = await import('pdfjs-dist/legacy/web/pdf_viewer.mjs');
+          if (mod && mod.renderTextLayer) {
+            await mod.renderTextLayer({
+              textContentSource: textContent,
+              container: textLayerDiv,
+              viewport,
+              textDivs: [],
+            }).promise;
+          }
+        } catch {
+          // Fallback: place simple text divs; selection won't match perfectly but enables copy/selection
+          for (const item of (textContent.items as any[])) {
+            const span = document.createElement('span');
+            span.textContent = (item.str as string) ?? '';
+            const { transform, width, height, fontSize } = item;
+            // Basic positioning approximation
+            const x = transform[4];
+            const y = transform[5] - fontSize;
+            span.style.position = 'absolute';
+            span.style.left = `${x}px`;
+            span.style.top = `${y}px`;
+            span.style.width = `${width || 0}px`;
+            span.style.height = `${height || fontSize}px`;
+            span.style.whiteSpace = 'pre';
+            span.style.color = 'transparent';
+            textLayerDiv.appendChild(span);
+          }
+        }
+      } catch {}
+      drawHighlights(i - 1, viewport.width, viewport.height);
     }
   } catch (e: any) {
     error.value = e?.message ?? String(e);
@@ -99,16 +213,85 @@ async function renderPdf() {
 onMounted(() => {
   cancelled = false;
   renderPdf();
+  // Selection listener: create anchor on confirmation
+  document.addEventListener('mouseup', onMouseUp);
 });
 
 onBeforeUnmount(() => {
   cancelled = true;
+  document.removeEventListener('mouseup', onMouseUp);
 });
 
-watch(() => [props.src, props.sources], () => {
+watch(() => [props.src, props.sources, props.zoom, props.fit], () => {
   cancelled = false;
   renderPdf();
 });
+
+function getSelectionText(): string {
+  const sel = window.getSelection();
+  return sel ? sel.toString().trim() : '';
+}
+
+function onMouseUp() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return;
+  const text = getSelectionText();
+  if (!text) return;
+  // Find which page wrapper contains the selection end container
+  let pageIndex = -1;
+  for (let i = 0; i < pageWrappers.length; i++) {
+    if (!pageWrappers[i]) continue;
+    if (pageWrappers[i].contains(sel.anchorNode) || pageWrappers[i].contains(sel.focusNode)) {
+      pageIndex = i;
+      break;
+    }
+  }
+  if (pageIndex < 0) return;
+  const wrapper = pageWrappers[pageIndex];
+  const wrapRect = wrapper.getBoundingClientRect();
+  const range = sel.getRangeAt(0);
+  const rectList = Array.from(range.getClientRects());
+  if (!rectList.length) return;
+  if (!confirm('Highlight & discuss this selection?')) return;
+  const normRects: Array<{ x:number; y:number; w:number; h:number }> = [];
+  for (const r of rectList.slice(0, 8)) {
+    // Normalize to wrapper
+    const x = Math.max(0, (r.left - wrapRect.left) / wrapRect.width);
+    const y = Math.max(0, (r.top - wrapRect.top) / wrapRect.height);
+    const w = Math.min(1, r.width / wrapRect.width);
+    const h = Math.min(1, r.height / wrapRect.height);
+    if (w > 0 && h > 0) normRects.push({ x, y, w, h });
+  }
+  if (!normRects.length) return;
+  // Persist via AnchoredContext
+  (async () => {
+    try {
+      if (!props.paperId) return;
+      const { anchored } = await import('@/api/endpoints');
+      const rectsEncoded = normRects.map(r =>
+        [r.x, r.y, r.w, r.h].map(n => Number(n.toFixed(4))).join(',')
+      ).join('|');
+      const ref = `p=${pageIndex + 1};rects=${rectsEncoded}`;
+      const { anchorId } = await anchored.create({
+        paperId: props.paperId,
+        kind: 'Lines',
+        ref,
+        snippet: text.slice(0, 300),
+      });
+      highlights[pageIndex] = (highlights[pageIndex] || []).concat(normRects);
+      // Repaint current page overlay
+      const canvas = wrapper.querySelector('canvas') as HTMLCanvasElement | null;
+      const width = canvas ? parseInt(canvas.style.width) || canvas.width : wrapRect.width;
+      const height = canvas ? parseInt(canvas.style.height) || canvas.height : wrapRect.height;
+      drawHighlights(pageIndex, width, height);
+      emit('anchorCreated', anchorId);
+      try { window.dispatchEvent(new CustomEvent('anchor-created', { detail: anchorId })); } catch {}
+      try { sel.removeAllRanges(); } catch {}
+    } catch (e) {
+      console.error('Failed to create anchor', e);
+    }
+  })();
+}
 </script>
 
 <style scoped>
@@ -117,6 +300,7 @@ watch(() => [props.src, props.sources], () => {
 .loading { color: #666; padding: 8px 0; }
 .error { color: var(--error); }
 .pages { display: grid; gap: 12px; }
+.page-wrapper { position: relative; }
 .page-canvas {
   display: block;
   margin: 0 auto;
@@ -124,6 +308,26 @@ watch(() => [props.src, props.sources], () => {
   border: 1px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: transparent; /* do not show duplicate text over canvas */
+  user-select: text;
+  pointer-events: auto;
+}
+.overlay {
+  position: absolute;
+  left: 0; top: 0; right: 0; bottom: 0;
+  pointer-events: none;
+}
+.hl {
+  position: absolute;
+  background: rgba(255, 230, 0, 0.35);
+  outline: 1px solid rgba(255, 200, 0, 0.9);
+  border-radius: 2px;
+  pointer-events: auto;
 }
 </style>
 
