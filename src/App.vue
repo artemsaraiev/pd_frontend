@@ -24,12 +24,7 @@ const anchorFilter = ref<string | null>(null);
 
 onMounted(async () => {
   try {
-    // await fetch('http://localhost:8000/api', { method: 'OPTIONS' });
-    await fetch('/api/health', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
+    await post<{ ok: boolean }>(`/health`, {});
     backendOk.value = true;
   } catch {
     backendOk.value = false;

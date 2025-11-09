@@ -4,7 +4,7 @@
       <div class="title-row">
         <h2 class="title">{{ header.title || id }}</h2>
         <div class="actions">
-          <a class="ghost" :href="pdfLink" target="_blank" rel="noreferrer">Open PDF</a>
+          <a class="ghost" :href="pdfArxivLink" target="_blank" rel="noreferrer">Open PDF</a>
           <button class="primary" @click="scrollToAnchors">Add Anchor</button>
           <button class="ghost" @click="saveToLibrary">Add to library</button>
           <a class="ghost" href="/">Back to Feed</a>
@@ -19,9 +19,12 @@
 
     <div class="columns">
       <section class="center">
-        <DiscussionPanel :paperId="id" :anchorFilterProp="anchorFilter" />
+        <PdfView :sources="[pdfProxyLink, pdfArxivLink]" />
       </section>
       <aside class="right card" ref="anchorsBox">
+        <h3>Discussion</h3>
+        <DiscussionPanel :paperId="id" :anchorFilterProp="anchorFilter" />
+        <div class="divider"></div>
         <h3>Anchors</h3>
         <AnchorsPanel :paperId="id" @filter-by-anchor="anchorFilter = $event" />
       </aside>
@@ -33,7 +36,9 @@
 import { onMounted, reactive, ref, computed } from 'vue';
 import DiscussionPanel from '@/components/DiscussionPanel.vue';
 import AnchorsPanel from '@/components/AnchorsPanel.vue';
+import PdfView from '@/components/PdfView.vue';
 import { paper } from '@/api/endpoints';
+import { BASE_URL } from '@/api/client';
 
 const props = defineProps<{ id: string }>();
 const resolvedId = ref<string>(props.id);
@@ -44,7 +49,8 @@ import { useSessionStore } from '@/stores/session';
 const session = useSessionStore();
 const banner = ref('');
 
-const pdfLink = computed(() => `https://arxiv.org/pdf/${encodeURIComponent(resolvedId.value)}.pdf`);
+const pdfProxyLink = computed(() => `${BASE_URL}/pdf/${encodeURIComponent(resolvedId.value)}`);
+const pdfArxivLink = computed(() => `https://arxiv.org/pdf/${encodeURIComponent(resolvedId.value)}.pdf`);
 
 onMounted(async () => {
   try {
@@ -104,6 +110,7 @@ async function ensurePaper() {
 .primary { background: var(--brand); color: #fff; border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
 .ghost { background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 6px; padding: 6px 10px; text-decoration: none; }
 .banner { margin-top: 8px; color: var(--error); }
+.divider { height: 1px; background: var(--border); margin: 12px 0; }
 @media (max-width: 1100px) {
   .columns { grid-template-columns: 1fr; }
 }

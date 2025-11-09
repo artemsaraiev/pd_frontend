@@ -6,4 +6,9 @@ declare module '*.vue' {
   export default component;
 }
 
+declare module '*?url' {
+  const src: string;
+  export default src;
+}
+
 
