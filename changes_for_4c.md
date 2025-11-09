@@ -40,6 +40,22 @@ PDF & discussion updates (new):
   - Pinned pdf.js to v3 (`pdfjs-dist@3.11.174`) and imported `web/pdf_viewer` + worker from `build/pdf.worker.min.js`.
   - Fixed HMR/Pinia edge case in `TopNav.vue` during hot reloads.
 
+Reddit-style collapsible replies (latest):
+- `DiscussionPanel.vue`:
+  - Added expand/collapse toggle for thread replies with "View replies" / "Hide replies" links.
+  - Replies are now hidden by default and only render when expanded (performance improvement for threads with many replies).
+  - Reactive `expanded` state tracks which threads are expanded per thread ID.
+- `ReplyTree.vue`:
+  - Refactored from inline `defineComponent` with string template to proper SFC architecture.
+  - Fixed Vue runtime compilation error by splitting `ReplyNode` into separate component.
+- `src/components/ReplyNode.vue` (new):
+  - Extracted recursive reply node component to its own SFC file.
+  - Handles nested reply rendering, inline reply composition, and recursive children.
+  - Properly supports Vue 3 SFC compilation without runtime template compiler.
+- Build verification:
+  - Frontend production build passes (`npm run build`).
+  - Backend build passes (`deno task build`).
+
 Next steps:
 - Re-run app (`deno task import` in backend, then `deno task start`) and click through flows to ensure endpoints still work.
 - If any routes move behind Requesting-only (not passthrough), adjust API calls accordingly.
