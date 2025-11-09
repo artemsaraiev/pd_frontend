@@ -12,11 +12,11 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { PDFPageView, EventBus } from 'pdfjs-dist/web/pdf_viewer.mjs';
+import { PDFPageView, EventBus } from 'pdfjs-dist/web/pdf_viewer';
 // Use Vite's asset url import to resolve worker at build-time
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url';
 
 // Configure worker
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc;

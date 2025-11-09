@@ -16,4 +16,9 @@ declare module 'pdfjs-dist/web/pdf_viewer.mjs' {
   export const PDFPageView: any;
 }
 
+declare module 'pdfjs-dist/web/pdf_viewer' {
+  export const EventBus: any;
+  export const PDFPageView: any;
+}
+
 

@@ -1,6 +1,5 @@
 <template>
   <div class="panel">
-    <h3>Anchors</h3>
     <p class="hint" v-if="!paperId">Set a current paper first.</p>
     <div class="row">
       <label>Kind</label>

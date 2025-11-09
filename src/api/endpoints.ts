@@ -49,6 +49,10 @@ export const discussion = {
     const data = await post<{ result: string }>(`/DiscussionPub/reply`, args);
     return { replyId: data.result };
   },
+  async replyTo(args: { threadId: string; author: string; body: string; parentId?: string; session?: string }): Promise<{ replyId: string }> {
+    const data = await post<{ result: string }>(`/DiscussionPub/replyTo`, args);
+    return { replyId: data.result };
+  },
   async getPubIdByPaper(args: { paperId: string }): Promise<{ pubId: string | null }> {
     const data = await post<{ result: string | null }>(`/DiscussionPub/getPubIdByPaper`, args);
     return { pubId: data.result };
@@ -60,6 +64,10 @@ export const discussion = {
   async listReplies(args: { threadId: string }): Promise<{ replies: Array<{ _id: string; author: string; body: string; createdAt: number; editedAt?: number }>}> {
     const data = await post<{ result: any[] }>(`/DiscussionPub/listReplies`, args);
     return { replies: data.result };
+  },
+  async listRepliesTree(args: { threadId: string }): Promise<{ replies: Array<any> }> {
+    const data = await post<{ result: any[] }>(`/DiscussionPub/listRepliesTree`, args);
+    return { replies: data.result as any[] };
   },
 };
 

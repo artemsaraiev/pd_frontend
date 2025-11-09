@@ -22,6 +22,24 @@ Latest updates:
 - “My Papers” per-user:
   - Library stored under `localStorage` key `library:<userId>`; switching accounts switches saved papers. Updated `PaperPage.vue` and `MyPapers.vue`.
 
+PDF & discussion updates (new):
+- Centered PDF viewer with highlight capture
+  - New component `src/components/PdfView.vue` using `pdfjs-dist@3.x` viewer (`PDFPageView`, textLayer).
+  - `src/views/PaperPage.vue` now centers the PDF in a scrollable pane with a zoom toolbar; the right sidebar shows Discussion + Anchors.
+  - `src/styles/pdf.css` ensures pdf.js helper boxes are hidden, selection is enabled, and z-index is correct (canvas < textLayer < overlay).
+  - The viewer accepts `[proxy, arXiv]` sources and falls back automatically if the proxy is unavailable.
+  - Text selection → confirm → saves an anchor via `/AnchoredContext/create` with `ref="p=..;rects=.."` and draws overlay highlights.
+- Anchors + threads
+  - Clicking “Reply” in Discussion focuses the Quick reply box.
+  - Threads can be filtered by anchor id; selecting text and creating an anchor allows starting a thread bound to that anchor.
+- Infinite-nesting replies
+  - New recursive component `src/components/ReplyTree.vue` renders nested replies.
+  - API additions in `src/api/endpoints.ts`: `discussion.replyTo`, `discussion.listRepliesTree`.
+  - `DiscussionPanel.vue` switched to `listRepliesTree` so replies nest like Reddit.
+- Stability/interop
+  - Pinned pdf.js to v3 (`pdfjs-dist@3.11.174`) and imported `web/pdf_viewer` + worker from `build/pdf.worker.min.js`.
+  - Fixed HMR/Pinia edge case in `TopNav.vue` during hot reloads.
+
 Next steps:
 - Re-run app (`deno task import` in backend, then `deno task start`) and click through flows to ensure endpoints still work.
 - If any routes move behind Requesting-only (not passthrough), adjust API calls accordingly.

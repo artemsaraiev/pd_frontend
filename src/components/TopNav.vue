@@ -22,8 +22,9 @@ import { session } from '@/api/endpoints';
 const props = defineProps<{ backendOk: boolean }>();
 const emit = defineEmits<{ (e: 'search', q: string): void }>();
 const q = ref('');
-const store = useSessionStore();
-const token = computed(() => store.token);
+let store: ReturnType<typeof useSessionStore>;
+try { store = useSessionStore(); } catch { /* during HMR pinia may not be active yet */ }
+const token = computed(() => store?.token ?? null);
 
 async function emitSearch() {
   const query = q.value.trim();
@@ -39,10 +40,10 @@ function goHome() { window.location.assign('/'); }
 function goLogin() { window.location.assign('/login'); }
 function goNewThread() { window.location.assign('/'); }
 async function logout() {
-  if (store.token) {
+  if (store?.token) {
     try { await session.logout({ session: store.token }); } catch {}
   }
-  store.clear();
+  store?.clear?.();
   window.location.assign('/');
 }
 </script>

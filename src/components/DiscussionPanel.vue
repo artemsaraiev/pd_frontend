@@ -58,14 +58,18 @@
           <div class="meta">
             <strong>{{ t.author }}</strong>
             <span v-if="t.anchorId" class="anchor">#{{ t.anchorId }}</span>
+            <span class="count">{{ t.replies?.length ?? 0 }} replies</span>
+            <a
+              v-if="t.replies && t.replies.length"
+              href="#"
+              class="toggle-link"
+              @click.prevent="toggleExpanded(t.id)"
+            >{{ expanded[t.id] ? 'Hide replies' : 'View replies' }}</a>
             <a href="#" class="reply-link" @click.prevent="replyTo(t.id)">Reply</a>
           </div>
           <p class="body">{{ t.body }}</p>
-          <ul class="replies">
-            <li v-for="r in t.replies" :key="r.id">
-              <strong>{{ r.author }}</strong>: {{ r.body }}
-            </li>
-          </ul>
+          <p v-if="!t.replies || t.replies.length === 0" class="hint">No replies yet.</p>
+          <ReplyTree v-if="expanded[t.id]" :nodes="t.replies" :threadId="t.id" @refresh="loadThreads" />
         </li>
       </ul>
       <p v-else-if="threads.length && anchorFilter">No threads match this filter.</p>
@@ -78,6 +82,7 @@
 import { ref, watch, computed } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { discussion } from '@/api/endpoints';
+import ReplyTree from '@/components/ReplyTree.vue';
 
 const props = defineProps<{ paperId: string | null; anchorFilterProp?: string | null }>();
 
@@ -97,20 +102,26 @@ const threadMsg = ref('');
 
 const replyThreadId = ref('');
 const replyBody = ref('');
+const quickReplyBox = ref<HTMLElement | null>(null);
 const busyReply = ref(false);
 const errorReply = ref('');
 const replyMsg = ref('');
 
 const actions = ref<string[]>([]);
-type Reply = { id: string; author: string; body: string };
-type Thread = { id: string; author: string; body: string; anchorId?: string; replies: Reply[] };
+type ReplyNode = { _id: string; author: string; body: string; children?: ReplyNode[] };
+type Thread = { id: string; author: string; body: string; anchorId?: string; replies: ReplyNode[] };
 const threads = ref<Thread[]>([]);
 const anchorFilter = ref('');
+const expanded = ref<Record<string, boolean>>({});
 const filteredThreads = computed(() =>
   (props.anchorFilterProp ?? anchorFilter.value)
     ? threads.value.filter(t => t.anchorId === (props.anchorFilterProp ?? anchorFilter.value))
     : threads.value
 );
+
+function toggleExpanded(id: string) {
+  expanded.value = { ...expanded.value, [id]: !expanded.value[id] };
+}
 
 async function loadThreads() {
   if (!pubId.value) { threads.value = []; return; }
@@ -118,8 +129,13 @@ async function loadThreads() {
   const { threads: list } = await discussion.listThreads({ pubId: pubId.value, anchorId: activeFilter });
   const built: Thread[] = [];
   for (const t of list) {
-    const { replies } = await discussion.listReplies({ threadId: t._id });
-    built.push({ id: t._id, author: t.author, body: t.body, anchorId: t.anchorId, replies: replies.map(r => ({ id: r._id, author: r.author, body: r.body })) });
+    // Prefer the tree API; fall back to flat list if tree is empty for any reason.
+    let nodes: any[] = (await discussion.listRepliesTree({ threadId: t._id })).replies as any[];
+    if (!nodes || nodes.length === 0) {
+      const flat = await discussion.listReplies({ threadId: t._id });
+      nodes = flat.replies.map(r => ({ _id: r._id, author: r.author, body: r.body, children: [] as any[] }));
+    }
+    built.push({ id: t._id, author: t.author, body: t.body, anchorId: t.anchorId, replies: nodes as any });
   }
   threads.value = built;
 }
@@ -200,7 +216,7 @@ async function onStartThread() {
 async function onReply() {
   busyReply.value = true; errorReply.value=''; replyMsg.value='';
   try {
-    const res = await discussion.reply({ threadId: replyThreadId.value, author: session.userId || 'anonymous', body: replyBody.value, session: session.token || undefined });
+    const res = await discussion.replyTo({ threadId: replyThreadId.value, author: session.userId || 'anonymous', body: replyBody.value, session: session.token || undefined });
     replyMsg.value = `Reply created (id: ${res.replyId})`;
     actions.value.unshift(`Reply ${res.replyId} added to ${replyThreadId.value}`);
     replyBody.value = '';
@@ -214,8 +230,10 @@ async function onReply() {
 
 function replyTo(tid: string) {
   replyThreadId.value = tid;
-  const el = document.querySelector('.panel .row textarea');
-  (el as HTMLTextAreaElement | null)?.focus();
+  // Focus Quick reply textarea and scroll it into view
+  const el = document.querySelector('.panel textarea[rows="2"]') as HTMLTextAreaElement | null;
+  el?.focus();
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 </script>
 
@@ -234,9 +252,10 @@ button:disabled { opacity: 0.6; }
 .card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .meta { display: flex; gap: 8px; align-items: baseline; }
 .reply-link { margin-left: auto; font-size: 12px; }
+.toggle-link { font-size: 12px; }
 .anchor { background: var(--chip-bg); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; font-size: 12px; }
 .body { margin: 6px 0; }
 .replies { padding-left: 16px; }
 </style>
 
-
+ 
