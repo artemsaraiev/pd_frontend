@@ -79,7 +79,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { discussion } from '@/api/endpoints';
 import ReplyTree from '@/components/ReplyTree.vue';
@@ -138,6 +138,7 @@ async function loadThreads() {
     built.push({ id: t._id, author: t.author, body: t.body, anchorId: t.anchorId, replies: nodes as any });
   }
   threads.value = built;
+  // Note: expanded state is preserved across reloads (not reset)
 }
 
 watch(() => props.paperId, () => { pubId.value = null; pubMsg.value=''; pubOpened.value = false; });
@@ -235,6 +236,40 @@ function replyTo(tid: string) {
   el?.focus();
   el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+function onTextSelected(e: Event) {
+  const custom = e as CustomEvent<string>;
+  const text = custom.detail;
+  if (!text) return;
+  
+  // Find the focused textarea or the quick reply textarea
+  const active = document.activeElement as HTMLTextAreaElement | null;
+  if (active && active.tagName === 'TEXTAREA') {
+    // Insert at cursor position
+    const start = active.selectionStart || 0;
+    const end = active.selectionEnd || 0;
+    const current = active.value;
+    const before = current.substring(0, start);
+    const after = current.substring(end);
+    const quote = `> ${text}\n\n`;
+    active.value = before + quote + after;
+    active.selectionStart = active.selectionEnd = start + quote.length;
+    active.focus();
+    // Trigger Vue reactivity
+    active.dispatchEvent(new Event('input', { bubbles: true }));
+  } else {
+    // Fall back to quick reply body
+    replyBody.value = `> ${text}\n\n` + replyBody.value;
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('text-selected', onTextSelected);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('text-selected', onTextSelected);
+});
 </script>
 
 <style scoped>

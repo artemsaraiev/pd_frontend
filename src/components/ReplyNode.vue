@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { discussion } from '@/api/endpoints';
 import { useSessionStore } from '@/stores/session';
 
@@ -56,6 +56,37 @@ async function send() {
     sending.value = false;
   }
 }
+
+function onTextSelected(e: Event) {
+  const custom = e as CustomEvent<string>;
+  const text = custom.detail;
+  if (!text) return;
+  
+  // Find the focused textarea
+  const active = document.activeElement as HTMLTextAreaElement | null;
+  if (active && active.tagName === 'TEXTAREA') {
+    // Insert at cursor position
+    const start = active.selectionStart || 0;
+    const end = active.selectionEnd || 0;
+    const current = active.value;
+    const before = current.substring(0, start);
+    const after = current.substring(end);
+    const quote = `> ${text}\n\n`;
+    active.value = before + quote + after;
+    active.selectionStart = active.selectionEnd = start + quote.length;
+    active.focus();
+    // Trigger Vue reactivity
+    active.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('text-selected', onTextSelected);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('text-selected', onTextSelected);
+});
 </script>
 
 <style scoped>

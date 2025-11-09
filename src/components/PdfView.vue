@@ -5,6 +5,14 @@
       <div v-if="loading" class="loading">Loading PDF…</div>
       <div ref="pagesContainer" class="pages"></div>
     </div>
+    <div v-if="showPopup" class="selection-popup" :style="{ left: popupX + 'px', top: popupY + 'px' }">
+      <button class="popup-btn" @click="insertIntoTextarea" title="Insert into active text field">
+        <span class="icon">💬</span> Annotate
+      </button>
+      <button class="popup-btn" @click="createAnchor" title="Create anchor and highlight">
+        <span class="icon">📌</span> Highlight
+      </button>
+    </div>
   </div>
   </template>
 
@@ -21,7 +29,7 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.js?url';
 // Configure worker
 (pdfjsLib as any).GlobalWorkerOptions.workerSrc = workerSrc;
 
-const emit = defineEmits<{ (e: 'anchorCreated', anchorId: string): void }>();
+const emit = defineEmits<{ (e: 'anchorCreated', anchorId: string): void; (e: 'textSelected', text: string): void }>();
 const props = defineProps<{
   src?: string;
   sources?: string[];
@@ -33,6 +41,11 @@ const props = defineProps<{
 const pagesContainer = ref<HTMLElement | null>(null);
 const loading = ref(true);
 const error = ref('');
+const showPopup = ref(false);
+const popupX = ref(0);
+const popupY = ref(0);
+const selectedText = ref('');
+let pendingSelection: { pageIndex: number; text: string; normRects: Array<{ x:number; y:number; w:number; h:number }> } | null = null;
 
 let cancelled = false;
 let renderToken = 0;
@@ -212,11 +225,14 @@ function getSelectionText(): string {
   return sel ? sel.toString().trim() : '';
 }
 
-function onMouseUp() {
+function onMouseUp(e: MouseEvent) {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return;
   const text = getSelectionText();
-  if (!text) return;
+  if (!text) {
+    showPopup.value = false;
+    return;
+  }
   // Find which page wrapper contains the selection end container
   let pageIndex = -1;
   for (let i = 0; i < pageWrappers.length; i++) {
@@ -226,15 +242,24 @@ function onMouseUp() {
       break;
     }
   }
-  if (pageIndex < 0) return;
+  if (pageIndex < 0) {
+    showPopup.value = false;
+    return;
+  }
   const wrapper = pageWrappers[pageIndex];
   const textLayer = wrapper.querySelector('.textLayer') as HTMLElement | null;
-  if (!textLayer) return;
+  if (!textLayer) {
+    showPopup.value = false;
+    return;
+  }
   const tlRect = textLayer.getBoundingClientRect();
   const range = sel.getRangeAt(0);
   const rectList = Array.from(range.getClientRects());
-  if (!rectList.length) return;
-  if (!confirm('Highlight & discuss this selection?')) return;
+  if (!rectList.length) {
+    showPopup.value = false;
+    return;
+  }
+  
   const normRects: Array<{ x:number; y:number; w:number; h:number }> = [];
   for (const r of rectList.slice(0, 8)) {
     // Normalize to textLayer box
@@ -246,37 +271,66 @@ function onMouseUp() {
       normRects.push({ x, y, w, h });
     }
   }
-  if (!normRects.length) return;
-  // Persist via AnchoredContext
-  (async () => {
-    try {
-      if (!props.paperId) return;
-      const { anchored } = await import('@/api/endpoints');
-      const rectsEncoded = normRects.map(r =>
-        [r.x, r.y, r.w, r.h].map(n => Number(n.toFixed(4))).join(',')
-      ).join('|');
-      const ref = `p=${pageIndex + 1};rects=${rectsEncoded}`;
-      const { anchorId } = await anchored.create({
-        paperId: props.paperId,
-        kind: 'Lines',
-        ref,
-        snippet: text.slice(0, 300),
-      });
-      highlights[pageIndex] = (highlights[pageIndex] || []).concat(normRects);
-      // Repaint current page overlay
-      drawHighlights(pageIndex, 0, 0);
-      emit('anchorCreated', anchorId);
-      try { window.dispatchEvent(new CustomEvent('anchor-created', { detail: anchorId })); } catch {}
-      try { sel.removeAllRanges(); } catch {}
-    } catch (e) {
-      console.error('Failed to create anchor', e);
-    }
-  })();
+  if (!normRects.length) {
+    showPopup.value = false;
+    return;
+  }
+  
+  // Show popup near selection
+  const lastRect = rectList[rectList.length - 1];
+  popupX.value = e.clientX;
+  popupY.value = lastRect.bottom + window.scrollY + 5;
+  selectedText.value = text;
+  pendingSelection = { pageIndex, text, normRects };
+  showPopup.value = true;
+}
+
+async function createAnchor() {
+  if (!pendingSelection || !props.paperId) return;
+  const { pageIndex, text, normRects } = pendingSelection;
+  showPopup.value = false;
+  
+  try {
+    const { anchored } = await import('@/api/endpoints');
+    const rectsEncoded = normRects.map(r =>
+      [r.x, r.y, r.w, r.h].map(n => Number(n.toFixed(4))).join(',')
+    ).join('|');
+    const ref = `p=${pageIndex + 1};rects=${rectsEncoded}`;
+    const { anchorId } = await anchored.create({
+      paperId: props.paperId,
+      kind: 'Lines',
+      ref,
+      snippet: text.slice(0, 300),
+    });
+    highlights[pageIndex] = (highlights[pageIndex] || []).concat(normRects);
+    // Repaint current page overlay
+    drawHighlights(pageIndex, 0, 0);
+    emit('anchorCreated', anchorId);
+    try { window.dispatchEvent(new CustomEvent('anchor-created', { detail: anchorId })); } catch {}
+    const sel = window.getSelection();
+    try { sel?.removeAllRanges(); } catch {}
+  } catch (e) {
+    console.error('Failed to create anchor', e);
+  }
+  pendingSelection = null;
+}
+
+function insertIntoTextarea() {
+  if (!pendingSelection) return;
+  showPopup.value = false;
+  emit('textSelected', selectedText.value);
+  // Also dispatch global event for any active textarea
+  try { 
+    window.dispatchEvent(new CustomEvent('text-selected', { detail: selectedText.value })); 
+  } catch {}
+  const sel = window.getSelection();
+  try { sel?.removeAllRanges(); } catch {}
+  pendingSelection = null;
 }
 </script>
 
 <style scoped>
-.pdf-root { display: block; }
+.pdf-root { display: block; position: relative; }
 .viewer { display: block; }
 .loading { color: #666; padding: 8px 0; }
 .error { color: var(--error); }
@@ -303,6 +357,38 @@ function onMouseUp() {
   outline: 1px solid rgba(255, 200, 0, 0.9);
   border-radius: 2px;
   pointer-events: none;
+}
+.selection-popup {
+  position: fixed;
+  z-index: 9999;
+  display: flex;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateX(-50%);
+}
+.popup-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: none;
+  background: #fff;
+  color: #333;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.popup-btn:hover {
+  background: #f5f5f5;
+}
+.popup-btn .icon {
+  font-size: 14px;
 }
 </style>
 
