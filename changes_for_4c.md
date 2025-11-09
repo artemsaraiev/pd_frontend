@@ -45,6 +45,7 @@ Reddit-style collapsible replies (latest):
   - Added expand/collapse toggle for thread replies with "View replies" / "Hide replies" links.
   - Replies are now hidden by default and only render when expanded (performance improvement for threads with many replies).
   - Reactive `expanded` state tracks which threads are expanded per thread ID.
+  - Expanded state preserved across thread reloads (no reset when creating anchors).
 - `ReplyTree.vue`:
   - Refactored from inline `defineComponent` with string template to proper SFC architecture.
   - Fixed Vue runtime compilation error by splitting `ReplyNode` into separate component.
@@ -56,8 +57,42 @@ Reddit-style collapsible replies (latest):
   - Frontend production build passes (`npm run build`).
   - Backend build passes (`deno task build`).
 
+ChatGPT-style text annotation (final updates):
+- `src/components/PdfView.vue`:
+  - Removed blocking `confirm()` dialog
+  - Added inline popup that appears on text selection with "💬 Annotate" button
+  - Removed "Highlight" button (simplified to annotation-only workflow)
+  - Popup positioned near selection with modern styling (shadow, hover effects)
+  - Emits `text-selected` event when annotate is clicked
+  - Text automatically formatted as quote (`> selected text`)
+- `src/components/DiscussionPanel.vue`:
+  - Listens for `text-selected` global event
+  - Inserts quoted text into focused textarea or quick reply box
+  - Maintains cursor position and triggers Vue reactivity
+  - Works seamlessly with thread creation and quick replies
+- `src/components/ReplyNode.vue`:
+  - Also listens for `text-selected` event
+  - Enables annotation into nested reply textareas
+  - Selection cleared after insertion
+
+MIT Email Authentication (final updates):
+- `src/views/Login.vue`:
+  - Combined login/register form with toggle button
+  - MIT email validation on frontend (`@mit.edu` required)
+  - Email input type with placeholder `your_email@mit.edu`
+  - Clear hints: "Only @mit.edu emails are allowed"
+  - Success/error messages for both registration and login
+  - Mode toggle: "Need an account? Register" / "Already have an account? Sign in"
+  - Computed validation: button disabled if email doesn't match `@mit.edu` pattern
+- User experience:
+  - Must register with MIT email before login
+  - Password stored securely (hashed on backend)
+  - Clear feedback on registration success
+  - Automatic mode switch after successful registration
+
 Next steps:
 - Re-run app (`deno task import` in backend, then `deno task start`) and click through flows to ensure endpoints still work.
 - If any routes move behind Requesting-only (not passthrough), adjust API calls accordingly.
+- Ready for deployment to Render (see `DEPLOYMENT.md`).
 
 

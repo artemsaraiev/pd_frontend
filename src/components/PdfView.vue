@@ -9,9 +9,6 @@
       <button class="popup-btn" @click="insertIntoTextarea" title="Insert into active text field">
         <span class="icon">💬</span> Annotate
       </button>
-      <button class="popup-btn" @click="createAnchor" title="Create anchor and highlight">
-        <span class="icon">📌</span> Highlight
-      </button>
     </div>
   </div>
   </template>
