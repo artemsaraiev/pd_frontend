@@ -197,7 +197,7 @@ async function onOpenPub() {
 }
 
 async function onStartThread() {
-  if (!pubId.value) return;
+  if (!pubId.value || busyThread.value) return; // Prevent double-submit
   busyThread.value = true; errorThread.value=''; threadMsg.value='';
   try {
     const res = await discussion.startThread({ pubId: pubId.value, author: session.userId || 'anonymous', body: body.value, anchorId: anchorId.value || undefined, session: session.token || undefined });
@@ -215,9 +215,11 @@ async function onStartThread() {
 }
 
 async function onReply() {
+  if (busyReply.value) return; // Prevent double-submit
   busyReply.value = true; errorReply.value=''; replyMsg.value='';
   try {
-    const res = await discussion.replyTo({ threadId: replyThreadId.value, author: session.userId || 'anonymous', body: replyBody.value, session: session.token || undefined });
+    // Use reply (not replyTo) for top-level replies to threads
+    const res = await discussion.reply({ threadId: replyThreadId.value, author: session.userId || 'anonymous', body: replyBody.value, session: session.token || undefined });
     replyMsg.value = `Reply created (id: ${res.replyId})`;
     actions.value.unshift(`Reply ${res.replyId} added to ${replyThreadId.value}`);
     replyBody.value = '';

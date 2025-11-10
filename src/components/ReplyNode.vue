@@ -40,7 +40,7 @@ const sending = ref(false);
 const sessionStore = useSessionStore();
 
 async function send() {
-  if (!body.value) return;
+  if (!body.value || sending.value) return; // Prevent double-submit
   sending.value = true;
   try {
     await discussion.replyTo({
@@ -48,6 +48,7 @@ async function send() {
       parentId: props.node._id,
       author: sessionStore.userId || 'anonymous',
       body: body.value,
+      session: sessionStore.token || undefined,
     });
     body.value = '';
     replying.value = false;
