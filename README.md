@@ -7,6 +7,12 @@
 
 ---
 
+- Design (A4c): [`DESIGN_FRONTEND.md`](DESIGN_FRONTEND.md)
+- Reflection (A4c): [`REFLECTION_FRONTEND.md`](REFLECTION_FRONTEND.md)
+- Change log (A4c): [`changes_for_4c.md`](changes_for_4c.md)
+
+---
+
 - User journey: see [`USER_JOURNEY.md`](USER_JOURNEY.md)
 - API specification: see [`API.md`](API.md)
 - Visual design study: see [`visual-design/study.md`](visual-design/study.md)
